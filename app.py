@@ -19,6 +19,9 @@ st.set_page_config(page_title="Finance App", layout="centered")
 if "user" not in st.session_state:
     st.session_state.user = None
 
+if "session" not in st.session_state:
+    st.session_state.session = None
+
 # =========================
 # FUNÇÕES
 # =========================
@@ -36,6 +39,7 @@ def get_data(user_id):
         st.error(f"Erro ao buscar dados: {e}")
         return pd.DataFrame()
 
+
 def add_data(user_id, name, value, category, type_, dt):
     try:
         supabase.table("transactions").insert({
@@ -48,9 +52,11 @@ def add_data(user_id, name, value, category, type_, dt):
         }).execute()
 
         return True
+
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
         return False
+
 
 def delete_data(row_id):
     try:
@@ -59,9 +65,11 @@ def delete_data(row_id):
             .eq("id", row_id) \
             .execute()
         return True
+
     except Exception as e:
         st.error(f"Erro ao excluir: {e}")
         return False
+
 
 # =========================
 # LOGIN / REGISTRO
@@ -86,6 +94,8 @@ if st.session_state.user is None:
 
                 if res.user:
                     st.session_state.user = res.user
+                    st.session_state.session = res.session
+
                     st.success("Login realizado!")
                     st.rerun()
                 else:
@@ -106,20 +116,32 @@ if st.session_state.user is None:
                     "password": password2
                 })
                 st.success("Conta criada! Agora faça login.")
+
             except Exception as e:
                 st.error(f"Erro ao registrar: {e}")
+
 
 # =========================
 # APP LOGADO
 # =========================
 else:
 
-    user_id = st.session_state.user.id
+    user = st.session_state.user
+    session = st.session_state.session
+
+    # 🔥 ESSENCIAL PARA RLS FUNCIONAR
+    supabase.auth.set_session(
+        session.access_token,
+        session.refresh_token
+    )
+
+    user_id = user.id
 
     st.sidebar.title("Menu")
 
     if st.sidebar.button("Sair"):
         st.session_state.user = None
+        st.session_state.session = None
         st.rerun()
 
     menu = st.sidebar.radio("Navegação", ["Dashboard", "Adicionar", "Gerenciar"])
@@ -144,11 +166,9 @@ else:
             col2.metric("Despesas", f"R$ {despesas:.2f}")
             col3.metric("Saldo", f"R$ {saldo:.2f}")
 
-            # GRÁFICO CATEGORIA
             st.subheader("📊 Por Categoria")
             st.bar_chart(df.groupby("category")["value"].sum())
 
-            # GRÁFICO TEMPO
             st.subheader("📈 Evolução")
             df["date"] = pd.to_datetime(df["date"])
             st.line_chart(df.groupby("date")["value"].sum())
